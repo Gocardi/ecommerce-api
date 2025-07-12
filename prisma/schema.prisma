@@ -13,81 +13,84 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Tabla principal de usuarios - Almacena todos los tipos de usuarios del sistema
 model User {
   id           Int      @id @default(autoincrement()) @map("user_id")
-  dni          String   @unique @db.VarChar(12)
+  dni          String   @unique @db.VarChar(12)          // dni
   fullName     String   @map("full_name") @db.VarChar(150)
   email        String   @unique @db.VarChar(200)
   passwordHash String   @map("password_hash") @db.VarChar(255)
-  role         String   @db.VarChar(20) // 'visitante', 'afiliado', 'admin', 'admin_general', 'repartidor'
-  isActive     Boolean  @default(true) @map("is_active")
+  role         String   @db.VarChar(20)                  // visitante, afiliado, admin, admin_general, repartidor
+  isActive     Boolean  @default(true) @map("is_active") // Para desactivar por incumplimiento de compra mínima
   createdAt    DateTime @default(now()) @map("created_at")
   lastLogin    DateTime? @map("last_login")
 
-  // Relations
-  affiliate           Affiliate?
-  sponsoredAffiliates Affiliate[] @relation("SponsorRelation")
-  orders              Order[]
-  carts               Cart[]   
-  commissions         Commission[]
-  referrals           Referral[]  @relation("ReferrerRelation")
-  referralsReceived   Referral[]  @relation("ReferredRelation")
-  minMonthlyBuys      MinMonthlyBuy[]
-  notifications       Notification[]
-  shippingAddresses   ShippingAddress[]
-  adminRegions        AdminRegion[]
+  // Relaciones bidireccionales con todas las entidades del sistema
+  affiliate           Affiliate?            // Un usuario puede ser afiliado (1:1)
+  sponsoredAffiliates Affiliate[] @relation("SponsorRelation") // Afiliados que patrocina
+  orders              Order[]               // Pedidos realizados
+  carts               Cart[]                // Carritos de compra
+  commissions         Commission[]          // Comisiones ganadas
+  referrals           Referral[]  @relation("ReferrerRelation")  // Usuarios que refirió
+  referralsReceived   Referral[]  @relation("ReferredRelation")  // Quien lo refirió
+  minMonthlyBuys      MinMonthlyBuy[]       // Registro de compras mínimas mensuales
+  notifications       Notification[]        // Notificaciones recibidas
+  shippingAddresses   ShippingAddress[]     // Direcciones de envío
+  adminRegions        AdminRegion[]         // Regiones que administra (solo admins)
+  rewardClaims        RewardClaim[]         // Premios canjeados
 
   @@map("users")
 }
 
-
+// Información específica de afiliados - Extiende la tabla User
 model Affiliate {
-  id       Int     @id @map("affiliate_id")
-  sponsorId Int?   @map("sponsor_id")
-  phone    String  @db.VarChar(20)
-  region   String? @db.VarChar(100)
+  id       Int     @id @map("affiliate_id")              // Mismo ID que User (1:1)
+  sponsorId Int?   @map("sponsor_id")                    // Quien lo refirió (puede ser null)
+  phone    String  @db.VarChar(20)                       // Teléfono obligatorio para afiliados
+  region   String? @db.VarChar(100)                      // Ubicación geográfica
   city     String? @db.VarChar(100)
   address  String? @db.VarChar(255)
-  reference String? @db.VarChar(255) // referencia de dirección
-  status   String  @default("active") @db.VarChar(20) // active, pending, suspended
-  points   Int     @default(0) // para sistema de premios
+  reference String? @db.VarChar(255)                     // Referencia de dirección
+  status   String  @default("active") @db.VarChar(20)    // active, pending, suspended
+  points   Int     @default(0)                           // Puntos acumulados para premios
 
-  // Relations
+  // Relaciones: Un afiliado ES un usuario y puede tener un patrocinador
   user    User  @relation(fields: [id], references: [id])
   sponsor User? @relation("SponsorRelation", fields: [sponsorId], references: [id])
 
   @@map("affiliates")
 }
 
-// NUEVA: Categorías de productos
+// Categorización del catálogo de productos
 model Category {
   id          Int       @id @default(autoincrement()) @map("category_id")
-  name        String    @db.VarChar(100)
+  name        String    @db.VarChar(100)              // Suplementos, Vitaminas, etc.
   description String?
-  isActive    Boolean   @default(true) @map("is_active")
+  isActive    Boolean   @default(true) @map("is_active") // Para ocultar categorías
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  // Relations
+  // Una categoría puede tener múltiples productos
   products Product[]
 
   @@map("categories")
 }
 
+// Catálogo principal de productos con precios diferenciados
 model Product {
   id          Int     @id @default(autoincrement()) @map("product_id")
   categoryId  Int     @map("category_id")
   name        String  @db.VarChar(200)
   description String?
-  price       Decimal @db.Decimal(10, 2)
-  affiliatePrice Decimal @map("affiliate_price") @db.Decimal(10, 2) // precio para afiliados
-  stock       Int     @default(0)
-  minStock    Int     @default(0) @map("min_stock") // stock mínimo
-  isActive    Boolean @default(true) @map("is_active")
-  imageUrl    String? @map("image_url") @db.VarChar(500)
-  weight      Decimal? @db.Decimal(8, 3) // para cálculo de envío
+  price       Decimal @db.Decimal(10, 2)               // Precio para visitantes/público
+  affiliatePrice Decimal @map("affiliate_price") @db.Decimal(10, 2) // Precio preferencial para afiliados
+  stock       Int     @default(0)                      // Inventario actual
+  minStock    Int     @default(0) @map("min_stock")    // Nivel mínimo para alertas
+  isActive    Boolean @default(true) @map("is_active") // Para ocultar productos
+  imageUrl    String? @map("image_url") @db.VarChar(500) // URL de imagen del producto
+  weight      Decimal? @db.Decimal(8, 3)               // Peso para cálculo de envío
   createdAt   DateTime @default(now()) @map("created_at")
 
-  // Relations
+  // Un producto pertenece a una categoría y puede estar en múltiples carritos/pedidos
   category   Category @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
   cartItems  CartItem[]
@@ -95,210 +98,246 @@ model Product {
   @@map("products")
 }
 
-// NUEVA: Carrito de compras
+// Carrito de compras temporal - Soporta usuarios logueados y visitantes
 model Cart {
   id        Int      @id @default(autoincrement()) @map("cart_id")
-  userId    Int?     @map("user_id") // null para visitantes
-  sessionId String?  @map("session_id") @db.VarChar(100) // para visitantes
+  userId    Int?     @map("user_id")                    // null para visitantes
+  sessionId String?  @map("session_id") @db.VarChar(100) // ID de sesión para visitantes
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")      // Se actualiza automáticamente
 
-  // Relations
+  // Un carrito puede pertenecer a un usuario registrado o ser anónimo
   user  User? @relation(fields: [userId], references: [id])
-  items CartItem[]
+  items CartItem[] // Items dentro del carrito
 
   @@map("carts")
 }
 
+// Items individuales dentro de un carrito
 model CartItem {
   id        Int @id @default(autoincrement()) @map("cart_item_id")
   cartId    Int @map("cart_id")
   productId Int @map("product_id")
-  quantity  Int
+  quantity  Int                                         // Cantidad del producto
 
-  // Relations
+  // Un item pertenece a un carrito y referencia un producto
   cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
 
+  // Un producto solo puede estar una vez por carrito (se actualiza quantity)
   @@unique([cartId, productId])
   @@map("cart_items")
 }
 
-// NUEVA: Direcciones de envío
+// Direcciones de envío de los usuarios
 model ShippingAddress {
   id        Int     @id @default(autoincrement()) @map("address_id")
   userId    Int     @map("user_id")
-  name      String  @db.VarChar(100) // nombre del destinatario
-  phone     String  @db.VarChar(20)
-  region    String  @db.VarChar(100)
-  city      String  @db.VarChar(100)
-  address   String  @db.VarChar(255)
-  reference String? @db.VarChar(255)
-  isDefault Boolean @default(false) @map("is_default")
+  name      String  @db.VarChar(100)                   // Nombre del destinatario
+  phone     String  @db.VarChar(20)                    // Teléfono de contacto
+  region    String  @db.VarChar(100)                   // Región/Departamento
+  city      String  @db.VarChar(100)                   // Ciudad/Distrito
+  address   String  @db.VarChar(255)                   // Dirección completa
+  reference String? @db.VarChar(255)                   // Referencia adicional
+  isDefault Boolean @default(false) @map("is_default") // Dirección principal del usuario
 
-  // Relations
+  // Una dirección pertenece a un usuario y puede ser usada en múltiples pedidos
   user   User    @relation(fields: [userId], references: [id])
   orders Order[]
 
   @@map("shipping_addresses")
 }
 
+// Pedidos realizados por los usuarios
 model Order {
   id                Int      @id @default(autoincrement()) @map("order_id")
   userId            Int      @map("user_id")
-  shippingAddressId Int?     @map("shipping_address_id")
+  shippingAddressId Int?     @map("shipping_address_id")   // Puede ser null si se ingresa manualmente
   createdAt         DateTime @default(now()) @map("created_at")
   status            String   @default("pending") @db.VarChar(20) // pending, paid, shipped, delivered, cancelled
-  totalAmount       Decimal  @map("total_amount") @db.Decimal(12, 2)
+  totalAmount       Decimal  @map("total_amount") @db.Decimal(12, 2) // Monto total incluyendo envío
   shippingCost      Decimal  @default(0) @map("shipping_cost") @db.Decimal(10, 2)
-  trackingCode      String?  @map("tracking_code") @db.VarChar(100) // código Shalom
-  scheduledDate     DateTime? @map("scheduled_date") // fecha programada
-  deliveredAt       DateTime? @map("delivered_at")
+  trackingCode      String?  @map("tracking_code") @db.VarChar(100) // Código de seguimiento
+  scheduledDate     DateTime? @map("scheduled_date")        // Fecha programada por admin
+  deliveredAt       DateTime? @map("delivered_at")          // Fecha de entrega real
+  shalomAgency      String?   @map("shalom_agency") @db.VarChar(100) // Agencia Shalom asignada
+  shalomGuide       String?   @map("shalom_guide") @db.VarChar(50)   // Guía de envío Shalom
 
-  // Relations
+  // Un pedido pertenece a un usuario y puede tener una dirección de envío
   user            User             @relation(fields: [userId], references: [id])
   shippingAddress ShippingAddress? @relation(fields: [shippingAddressId], references: [id])
-  orderItems      OrderItem[]
-  payments        Payment[]
+  orderItems      OrderItem[]      // Items del pedido
+  payments        Payment[]        // Pagos asociados
 
   @@map("orders")
 }
 
+// Items individuales dentro de un pedido
 model OrderItem {
   id        Int     @id @default(autoincrement()) @map("order_item_id")
   orderId   Int     @map("order_id")
   productId Int     @map("product_id")
-  quantity  Int
-  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+  quantity  Int                                   // Cantidad comprada
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2) // Precio al momento de la compra
 
-  // Relations
+  // Un item pertenece a un pedido y referencia un producto
   order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product      @relation(fields: [productId], references: [id])
-  commissions Commission[]
+  commissions Commission[] // Comisiones generadas por este item
 
   @@map("order_items")
 }
 
+// Pagos realizados para los pedidos - Soporta múltiples métodos
 model Payment {
   id         Int      @id @default(autoincrement()) @map("payment_id")
   orderId    Int      @map("order_id")
-  paidAt     DateTime @map("paid_at")
-  method     String   @db.VarChar(50) // 'BCP_code', 'cash', 'credit_card'
-  amount     Decimal  @db.Decimal(12, 2)
-  status     String   @db.VarChar(20) // 'valid', 'failed', 'pending'
-  bcpCode    String?  @map("bcp_code") @db.VarChar(50) // código BCP
-  reference  String?  @db.VarChar(100) // referencia del pago
+  paidAt     DateTime @map("paid_at")               // Fecha y hora del pago
+  method     String   @db.VarChar(50)               // BCP_code, cash, credit_card
+  amount     Decimal  @db.Decimal(12, 2)           // Monto pagado
+  status     String   @db.VarChar(20)               // valid, failed, pending
+  bcpCode    String?  @map("bcp_code") @db.VarChar(50) // Código BCP específico
+  reference  String?  @db.VarChar(100)              // Referencia adicional del pago
 
-  // Relations
+  // Un pago pertenece a un pedido específico
   order Order @relation(fields: [orderId], references: [id])
 
   @@map("payments")
 }
 
+// Sistema de comisiones para afiliados
 model Commission {
   id          Int      @id @default(autoincrement()) @map("commission_id")
-  affiliateId Int      @map("affiliate_id")
-  orderItemId Int      @map("order_item_id")
-  type        String   @db.VarChar(20) // 'direct', 'referral'
-  amount      Decimal  @db.Decimal(10, 2)
-  percentage  Decimal  @db.Decimal(5, 2) // porcentaje aplicado
+  affiliateId Int      @map("affiliate_id")          // Afiliado que recibe la comisión
+  orderItemId Int      @map("order_item_id")         // Item que generó la comisión
+  type        String   @db.VarChar(20)               // direct (venta propia), referral (venta de referido)
+  amount      Decimal  @db.Decimal(10, 2)           // Monto de la comisión
+  percentage  Decimal  @db.Decimal(5, 2)            // Porcentaje aplicado
   status      String   @default("pending") @db.VarChar(20) // pending, approved, paid
   createdAt   DateTime @default(now()) @map("created_at")
-  approvedAt  DateTime? @map("approved_at")
+  approvedAt  DateTime? @map("approved_at")          // Fecha de aprobación por admin
 
-  // Relations
+  // Una comisión pertenece a un afiliado y se genera por un item específico
   affiliate User      @relation(fields: [affiliateId], references: [id])
   orderItem OrderItem @relation(fields: [orderItemId], references: [id])
 
   @@map("commissions")
 }
 
+// Registro de relaciones de referidos entre afiliados
 model Referral {
-  referrerId Int      @map("referrer_id")
-  referredId Int      @map("referred_id")
-  referredAt DateTime @default(now()) @map("referred_at")
+  referrerId Int      @map("referrer_id")            // Quien refirió
+  referredId Int      @map("referred_id")            // Quien fue referido
+  referredAt DateTime @default(now()) @map("referred_at") // Fecha del referido
 
-  // Relations
+  // Relaciones bidireccionales para consultas eficientes
   referrer User @relation("ReferrerRelation", fields: [referrerId], references: [id])
   referred User @relation("ReferredRelation", fields: [referredId], references: [id])
 
+  // Clave primaria compuesta - Un usuario solo puede ser referido una vez por otro
   @@id([referrerId, referredId])
   @@map("referrals")
 }
 
-// NUEVA: Configuración de reglas de negocio
+// Configuración dinámica de reglas de negocio
 model BusinessRule {
   id    Int    @id @default(autoincrement()) @map("rule_id")
-  key   String @unique @db.VarChar(50) // 'min_monthly_buy', 'referral_commission', etc.
-  value String @db.VarChar(500) // valor JSON o string
-  type  String @db.VarChar(20) // 'number', 'percentage', 'json'
+  key   String @unique @db.VarChar(50)               // min_monthly_buy, referral_commission, etc.
+  value String @db.VarChar(500)                      // Valor como JSON o string
+  type  String @db.VarChar(20)                       // number, percentage, json
 
   @@map("business_rules")
 }
 
+// Seguimiento de compra mínima mensual para afiliados
 model MinMonthlyBuy {
-  affiliateId Int      @id @map("affiliate_id")
-  month       DateTime
-  quantity    Int
-  achieved    Boolean  @default(false) // si cumplió o no
+  id          Int      @id @default(autoincrement()) @map("monthly_buy_id")
+  affiliateId Int      @map("affiliate_id")
+  month       DateTime                               // Primer día del mes (2025-07-01)
+  quantity    Int                                    // Cantidad de productos comprados
+  achieved    Boolean  @default(false)               // Si cumplió con el mínimo
 
-  // Relations
+  // Un registro pertenece a un afiliado específico
   affiliate User @relation(fields: [affiliateId], references: [id])
 
+  // Un afiliado solo puede tener un registro por mes
   @@unique([affiliateId, month], name: "uq_aff_month")
   @@map("min_monthly_buys")
 }
 
-// NUEVA: Sistema de premios
+// Catálogo de premios canjeables por puntos
 model Reward {
   id          Int     @id @default(autoincrement()) @map("reward_id")
-  name        String  @db.VarChar(200)
-  description String?
-  pointsRequired Int  @map("points_required")
-  imageUrl    String? @map("image_url") @db.VarChar(500)
-  isActive    Boolean @default(true) @map("is_active")
-  stock       Int     @default(0)
+  name        String  @db.VarChar(200)              // Nombre del premio
+  description String?                               // Descripción detallada
+  pointsRequired Int  @map("points_required")       // Puntos necesarios para canjear
+  imageUrl    String? @map("image_url") @db.VarChar(500) // Imagen del premio
+  isActive    Boolean @default(true) @map("is_active") // Para ocultar premios
+  stock       Int     @default(0)                   // Cantidad disponible
+
+  // Un premio puede ser canjeado múltiples veces
+  claims      RewardClaim[]
 
   @@map("rewards")
 }
 
-// NUEVA: Regiones administrativas
+// Asignación de regiones a administradores
 model AdminRegion {
-  adminId Int    @map("admin_id")
-  region  String @db.VarChar(100)
+  adminId Int    @map("admin_id")                   // ID del administrador
+  region  String @db.VarChar(100)                   // Región que administra
 
-  // Relations
+  // Un admin puede administrar múltiples regiones
   admin User @relation(fields: [adminId], references: [id])
 
+  // Clave primaria compuesta - Un admin puede tener múltiples regiones
   @@id([adminId, region])
   @@map("admin_regions")
 }
 
+// Sistema de notificaciones para usuarios
 model Notification {
   id        Int      @id @default(autoincrement()) @map("notification_id")
   userId    Int      @map("user_id")
-  type      String   @db.VarChar(50) // 'payment_ok', 'commission', 'account_pending', etc.
-  title     String   @db.VarChar(200)
-  message   String
-  readFlag  Boolean  @default(false) @map("read_flag")
+  type      String   @db.VarChar(50)               // payment_ok, commission, account_pending, etc.
+  title     String   @db.VarChar(200)              // Título de la notificación
+  message   String                                 // Mensaje completo
+  readFlag  Boolean  @default(false) @map("read_flag") // Si fue leída o no
   createdAt DateTime @default(now()) @map("created_at")
 
-  // Relations
+  // Una notificación pertenece a un usuario específico
   user User @relation(fields: [userId], references: [id])
 
   @@map("notifications")
 }
 
+// Centro de capacitación y tutoriales
 model Tutorial {
   id          Int      @id @default(autoincrement()) @map("tutorial_id")
-  title       String   @db.VarChar(200)
-  description String?
-  url         String   @db.VarChar(500)
-  contentType String   @map("content_type") @db.VarChar(20) // 'video', 'pdf', etc.
-  category    String   @db.VarChar(50) // 'sales', 'platform', 'products'
-  order       Int      @default(0) // orden de visualización
-  isActive    Boolean  @default(true) @map("is_active")
+  title       String   @db.VarChar(200)             // Título del tutorial
+  description String?                               // Descripción breve
+  url         String   @db.VarChar(500)             // URL del video o PDF
+  contentType String   @map("content_type") @db.VarChar(20) // video, pdf, etc.
+  category    String   @db.VarChar(50)              // sales, platform, products
+  order       Int      @default(0)                  // Orden de visualización
+  isActive    Boolean  @default(true) @map("is_active") // Para ocultar tutoriales
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("tutorials")
+}
+
+// Registro de canjes de premios por afiliados
+model RewardClaim {
+  id          Int      @id @default(autoincrement()) @map("claim_id")
+  affiliateId Int      @map("affiliate_id")          // Afiliado que canjea
+  rewardId    Int      @map("reward_id")             // Premio canjeado
+  pointsUsed  Int      @map("points_used")           // Puntos descontados
+  status      String   @default("pending") @db.VarChar(20) // pending, approved, delivered
+  claimedAt   DateTime @default(now()) @map("claimed_at") // Fecha de canje
+  deliveredAt DateTime? @map("delivered_at")         // Fecha de entrega
+
+  // Un canje pertenece a un afiliado y referencia un premio específico
+  affiliate User   @relation(fields: [affiliateId], references: [id])
+  reward    Reward @relation(fields: [rewardId], references: [id])
+
+  @@map("reward_claims")
 }
