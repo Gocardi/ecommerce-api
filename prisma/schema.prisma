@@ -65,9 +65,12 @@ model Affiliate {
 model Category {
   id          Int       @id @default(autoincrement()) @map("category_id")
   name        String    @db.VarChar(100)              // Suplementos, Vitaminas, etc.
+  slug        String    @unique @db.VarChar(100)       // URL-friendly name
   description String?
+  imageUrl    String?   @map("image_url") @db.VarChar(500) // URL de imagen de la categoría
   isActive    Boolean   @default(true) @map("is_active") // Para ocultar categorías
   createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   // Una categoría puede tener múltiples productos
   products Product[]
@@ -75,20 +78,24 @@ model Category {
   @@map("categories")
 }
 
+
 // Catálogo principal de productos con precios diferenciados
 model Product {
-  id          Int     @id @default(autoincrement()) @map("product_id")
-  categoryId  Int     @map("category_id")
-  name        String  @db.VarChar(200)
-  description String?
-  price       Decimal @db.Decimal(10, 2)               // Precio para visitantes/público
-  affiliatePrice Decimal @map("affiliate_price") @db.Decimal(10, 2) // Precio preferencial para afiliados
-  stock       Int     @default(0)                      // Inventario actual
-  minStock    Int     @default(0) @map("min_stock")    // Nivel mínimo para alertas
-  isActive    Boolean @default(true) @map("is_active") // Para ocultar productos
-  imageUrl    String? @map("image_url") @db.VarChar(500) // URL de imagen del producto
-  weight      Decimal? @db.Decimal(8, 3)               // Peso para cálculo de envío
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                 Int     @id @default(autoincrement()) @map("product_id")
+  categoryId         Int     @map("category_id")
+  name               String  @db.VarChar(200)
+  description        String?
+  publicPrice        Decimal @map("public_price") @db.Decimal(10, 2)     // Precio para visitantes/público
+  affiliatePrice     Decimal @map("affiliate_price") @db.Decimal(10, 2) // Precio preferencial para afiliados
+  stock              Int     @default(0)                      // Inventario actual
+  minStock           Int     @default(0) @map("min_stock")    // Nivel mínimo para alertas
+  discountPercentage Decimal? @map("discount_percentage") @db.Decimal(5, 2) // Porcentaje de descuento
+  sku                String? @unique @db.VarChar(50)         // Código único del producto
+  isActive           Boolean @default(true) @map("is_active") // Para ocultar productos
+  imageUrl           String? @map("image_url") @db.VarChar(500) // URL de imagen del producto
+  weight             Decimal? @db.Decimal(8, 3)               // Peso para cálculo de envío
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Un producto pertenece a una categoría y puede estar en múltiples carritos/pedidos
   category   Category @relation(fields: [categoryId], references: [id])
