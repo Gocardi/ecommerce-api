@@ -1,15 +1,15 @@
-// filepath: /home/gocardi/boost-project/ecommerce-api/src/auth/auth.service.ts
 import {
   Injectable,
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUtil } from '../utils/auth.util';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterAdminDto, RegisterUserDto, RegisterAffiliateDto } from './dto/register.dto';
 
 @Injectable()
 export class AuthService {
@@ -18,9 +18,13 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  /**
+   * RF-01: Login con DNI y contraseña
+   */
   async login(loginDto: LoginDto) {
     const { dni, password } = loginDto;
 
+    // Buscar usuario por DNI
     const user = await this.prisma.user.findUnique({
       where: { dni },
       include: {
@@ -29,30 +33,34 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('DNI o contraseña incorrectos');
+      throw new UnauthorizedException('Credenciales incorrectas');
     }
 
-    const isPasswordValid = await AuthUtil.comparePassword(
-      password,
-      user.passwordHash,
-    );
-
+    // Verificar contraseña
+    const isPasswordValid = await AuthUtil.comparePassword(password, user.passwordHash);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('DNI o contraseña incorrectos');
+      throw new UnauthorizedException('Credenciales incorrectas');
     }
 
+    // Verificar si el usuario está activo
     if (!user.isActive) {
-      throw new UnauthorizedException(
-        'Cuenta desactivada. Contacte al administrador.',
-      );
+      throw new UnauthorizedException('Cuenta desactivada. Contacta al administrador.');
     }
 
+    // Actualizar último login
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },
     });
 
-    const payload = AuthUtil.createJwtPayload(user);
+    // Generar JWT
+    const payload = {
+      sub: user.id,
+      dni: user.dni,
+      role: user.role,
+      email: user.email,
+    };
+
     const token = this.jwtService.sign(payload);
 
     return {
@@ -63,16 +71,22 @@ export class AuthService {
         email: user.email,
         role: user.role,
         isActive: user.isActive,
+        maxReferrals: user.maxReferrals,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin,
         affiliate: user.affiliate,
       },
       token,
-      expiresIn: '7d',
     };
   }
 
-  async register(registerDto: RegisterDto) {
-    const { dni, email, password, role, ...affiliateData } = registerDto;
+  /**
+   * RF-02: Registro de usuario normal
+   */
+  async registerUser(registerDto: RegisterUserDto) {
+    const { dni, email, password, ...userData } = registerDto;
 
+    // Verificar si ya existe
     const existingUser = await this.prisma.user.findFirst({
       where: {
         OR: [{ dni }, { email }],
@@ -88,17 +102,73 @@ export class AuthService {
       }
     }
 
-    if (affiliateData.sponsorId) {
-      const sponsor = await this.prisma.user.findFirst({
-        where: {
-          id: affiliateData.sponsorId,
-          role: 'afiliado',
-          isActive: true,
-        },
-      });
+    const passwordHash = await AuthUtil.hashPassword(password);
 
-      if (!sponsor) {
-        throw new BadRequestException('Patrocinador no válido');
+    const user = await this.prisma.user.create({
+      data: {
+        dni,
+        fullName: registerDto.fullName,
+        email,
+        passwordHash,
+        role: 'visitante',
+      },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        dni: user.dni,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+      },
+    };
+  }
+
+  /**
+   * RF-02: Registro de afiliado
+   */
+  async registerAffiliate(registerDto: RegisterAffiliateDto, sponsorId: number) {
+    const { dni, email, password, ...affiliateData } = registerDto;
+
+    // Verificar sponsor
+    const sponsor = await this.prisma.user.findFirst({
+      where: {
+        id: sponsorId,
+        role: { in: ['afiliado', 'admin', 'admin_general'] },
+        isActive: true,
+      },
+      include: {
+        sponsoredAffiliates: true,
+      },
+    });
+
+    if (!sponsor) {
+      throw new BadRequestException('Patrocinador no válido');
+    }
+
+    // Verificar límite de referidos si es afiliado
+    if (sponsor.role === 'afiliado' && sponsor.maxReferrals) {
+      if (sponsor.sponsoredAffiliates.length >= sponsor.maxReferrals) {
+        throw new BadRequestException('Has alcanzado el límite máximo de referidos');
+      }
+    }
+
+    // Verificar si ya existe
+    const existingUser = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ dni }, { email }],
+      },
+    });
+
+    if (existingUser) {
+      if (existingUser.dni === dni) {
+        throw new ConflictException('El DNI ya está registrado');
+      }
+      if (existingUser.email === email) {
+        throw new ConflictException('El email ya está registrado');
       }
     }
 
@@ -111,38 +181,33 @@ export class AuthService {
           fullName: registerDto.fullName,
           email,
           passwordHash,
-          role,
+          role: 'afiliado',
+          maxReferrals: affiliateData.maxReferrals || 10,
+          createdBy: sponsorId,
         },
       });
 
-      if (role === 'afiliado') {
-        await tx.affiliate.create({
-          data: {
-            id: user.id,
-            sponsorId: affiliateData.sponsorId || null,
-            phone: affiliateData.phone || '',
-            region: affiliateData.region || null,
-            city: affiliateData.city || null,
-            address: affiliateData.address || null,
-            reference: affiliateData.reference || null,
-          },
-        });
+      await tx.affiliate.create({
+        data: {
+          id: user.id,
+          sponsorId: sponsorId,
+          phone: affiliateData.phone,
+          region: affiliateData.region,
+          city: affiliateData.city,
+          address: affiliateData.address,
+          reference: affiliateData.reference || null,
+        },
+      });
 
-        if (affiliateData.sponsorId) {
-          await tx.referral.create({
-            data: {
-              referrerId: affiliateData.sponsorId,
-              referredId: user.id,
-            },
-          });
-        }
-      }
+      await tx.referral.create({
+        data: {
+          referrerId: sponsorId,
+          referredId: user.id,
+        },
+      });
 
       return user;
     });
-
-    const payload = AuthUtil.createJwtPayload(result);
-    const token = this.jwtService.sign(payload);
 
     return {
       user: {
@@ -152,42 +217,170 @@ export class AuthService {
         email: result.email,
         role: result.role,
         isActive: result.isActive,
+        maxReferrals: result.maxReferrals,
+        createdAt: result.createdAt,
       },
-      token,
-      expiresIn: '7d',
     };
   }
 
+  /**
+   * RF-02: Registro de administrador
+   */
+  async registerAdmin(registerDto: RegisterAdminDto, createdBy: number) {
+    const { dni, email, password, ...adminData } = registerDto;
+
+    // Solo admin_general puede crear admins
+    const creator = await this.prisma.user.findFirst({
+      where: {
+        id: createdBy,
+        role: 'admin_general',
+        isActive: true,
+      },
+    });
+
+    if (!creator) {
+      throw new UnauthorizedException('Solo el administrador general puede crear administradores');
+    }
+
+    // Verificar si ya existe
+    const existingUser = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ dni }, { email }],
+      },
+    });
+
+    if (existingUser) {
+      if (existingUser.dni === dni) {
+        throw new ConflictException('El DNI ya está registrado');
+      }
+      if (existingUser.email === email) {
+        throw new ConflictException('El email ya está registrado');
+      }
+    }
+
+    const passwordHash = await AuthUtil.hashPassword(password);
+
+    const user = await this.prisma.user.create({
+      data: {
+        dni,
+        fullName: registerDto.fullName,
+        email,
+        passwordHash,
+        role: 'admin',
+        createdBy: createdBy,
+      },
+    });
+
+    // Asignar región al administrador
+    await this.prisma.adminRegion.create({
+      data: {
+        adminId: user.id,
+        region: adminData.region,
+      },
+    });
+
+    return {
+      user: {
+        id: user.id,
+        dni: user.dni,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+      },
+    };
+  }
+
+  /**
+   * Obtener perfil completo del usuario
+   */
   async getProfile(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        dni: true,
-        fullName: true,
-        email: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        lastLogin: true,
-        affiliate: {
-          select: {
-            phone: true,
-            region: true,
-            city: true,
-            address: true,
-            reference: true,
-            status: true,
-            points: true,
-          },
-        },
+      include: {
+        affiliate: true,
       },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Usuario no encontrado');
+      throw new NotFoundException('Usuario no encontrado');
     }
 
-    return user;
+    const { passwordHash, ...userProfile } = user;
+    return userProfile;
+  }
+
+  /**
+   * Actualizar perfil del usuario
+   */
+  async updateProfile(userId: number, updateData: Partial<RegisterUserDto>) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Verificar si se está actualizando el email y que no exista
+    if (updateData.email && updateData.email !== user.email) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: updateData.email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('El email ya está registrado');
+      }
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        fullName: updateData.fullName,
+        email: updateData.email,
+      },
+    });
+
+    const { passwordHash, ...userProfile } = updatedUser;
+    return userProfile;
+  }
+
+  /**
+   * Actualizar límite de referidos
+   */
+  async updateMaxReferrals(affiliateId: number, maxReferrals: number, updatedBy: number) {
+    // Verificar permisos
+    const updater = await this.prisma.user.findFirst({
+      where: {
+        id: updatedBy,
+        role: { in: ['admin', 'admin_general'] },
+        isActive: true,
+      },
+    });
+
+    if (!updater) {
+      throw new UnauthorizedException('No tienes permisos para realizar esta acción');
+    }
+
+    // Verificar que el afiliado existe
+    const affiliate = await this.prisma.user.findFirst({
+      where: {
+        id: affiliateId,
+        role: 'afiliado',
+        isActive: true,
+      },
+    });
+
+    if (!affiliate) {
+      throw new NotFoundException('Afiliado no encontrado');
+    }
+
+    await this.prisma.user.update({
+      where: { id: affiliateId },
+      data: { maxReferrals },
+    });
+
+    return { success: true };
   }
 }

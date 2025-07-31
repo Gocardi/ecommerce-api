@@ -1,42 +1,30 @@
-import {
-  IsString,
-  IsEmail,
-  IsNotEmpty,
-  Length,
-  Matches,
-  IsOptional,
-  IsIn,
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsEmail, Length, Matches, IsOptional, IsInt, Min } from 'class-validator';
 
-export class RegisterDto {
+export class RegisterUserDto {
   @IsString()
-  @IsNotEmpty()
-  @Length(8, 12)
-  @Matches(/^\d+$/, { message: 'DNI debe contener solo números' })
+  @IsNotEmpty({ message: 'El DNI es requerido' })
+  @Length(8, 8, { message: 'El DNI debe tener 8 dígitos' })
+  @Matches(/^\d+$/, { message: 'El DNI debe contener solo números' })
   dni: string;
 
   @IsString()
-  @IsNotEmpty()
-  @Length(2, 150)
+  @IsNotEmpty({ message: 'El nombre completo es requerido' })
+  @Length(2, 150, { message: 'El nombre debe tener entre 2 y 150 caracteres' })
   fullName: string;
 
-  @IsEmail()
-  @IsNotEmpty()
+  @IsEmail({}, { message: 'El email no es válido' })
+  @IsNotEmpty({ message: 'El email es requerido' })
   email: string;
 
   @IsString()
-  @IsNotEmpty()
-  @Length(6, 50)
+  @IsNotEmpty({ message: 'La contraseña es requerida' })
+  @Length(6, 50, { message: 'La contraseña debe tener entre 6 y 50 caracteres' })
   password: string;
 
-  @IsString()
-  @IsIn(['visitante', 'afiliado'])
-  role: 'visitante' | 'afiliado';
-
-  // Campos específicos para afiliados
+  // Campos opcionales para usuarios normales
   @IsOptional()
   @IsString()
-  @Length(9, 20)
+  @Length(9, 20, { message: 'El teléfono debe tener entre 9 y 20 caracteres' })
   phone?: string;
 
   @IsOptional()
@@ -54,7 +42,87 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   reference?: string;
+}
+
+export class RegisterAffiliateDto {
+  @IsString()
+  @IsNotEmpty({ message: 'El DNI es requerido' })
+  @Length(8, 8, { message: 'El DNI debe tener 8 dígitos' })
+  @Matches(/^\d+$/, { message: 'El DNI debe contener solo números' })
+  dni: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El nombre completo es requerido' })
+  @Length(2, 150, { message: 'El nombre debe tener entre 2 y 150 caracteres' })
+  fullName: string;
+
+  @IsEmail({}, { message: 'El email no es válido' })
+  @IsNotEmpty({ message: 'El email es requerido' })
+  email: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La contraseña es requerida' })
+  @Length(6, 50, { message: 'La contraseña debe tener entre 6 y 50 caracteres' })
+  password: string;
+
+  // Campos obligatorios para afiliados
+  @IsString()
+  @IsNotEmpty({ message: 'El teléfono es requerido' })
+  @Length(9, 20, { message: 'El teléfono debe tener entre 9 y 20 caracteres' })
+  phone: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La región es requerida' })
+  region: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La ciudad es requerida' })
+  city: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La dirección es requerida' })
+  address: string;
 
   @IsOptional()
-  sponsorId?: number; // ID del afiliado que lo refiere
+  @IsString()
+  reference?: string;
+
+  @IsOptional()
+  @IsInt({ message: 'El máximo de referidos debe ser un número entero' })
+  @Min(1, { message: 'El máximo de referidos debe ser al menos 1' })
+  maxReferrals?: number;
+}
+
+export class RegisterAdminDto {
+  @IsString()
+  @IsNotEmpty({ message: 'El DNI es requerido' })
+  @Length(8, 8, { message: 'El DNI debe tener 8 dígitos' })
+  @Matches(/^\d+$/, { message: 'El DNI debe contener solo números' })
+  dni: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El nombre completo es requerido' })
+  @Length(2, 150, { message: 'El nombre debe tener entre 2 y 150 caracteres' })
+  fullName: string;
+
+  @IsEmail({}, { message: 'El email no es válido' })
+  @IsNotEmpty({ message: 'El email es requerido' })
+  email: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La contraseña es requerida' })
+  @Length(6, 50, { message: 'La contraseña debe tener entre 6 y 50 caracteres' })
+  password: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El teléfono es requerido' })
+  phone: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La región es requerida' })
+  region: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'La ciudad es requerida' })
+  city: string;
 }

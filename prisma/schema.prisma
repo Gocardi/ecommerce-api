@@ -22,6 +22,8 @@ model User {
   passwordHash String   @map("password_hash") @db.VarChar(255)
   role         String   @db.VarChar(20)                  // visitante, afiliado, admin, admin_general, repartidor
   isActive     Boolean  @default(true) @map("is_active") // Para desactivar por incumplimiento de compra mínima
+  maxReferrals Int?     @map("max_referrals")           // Máximo de referidos permitidos (solo para afiliados)
+  createdBy    Int?     @map("created_by")              // Quien creó este usuario
   createdAt    DateTime @default(now()) @map("created_at")
   lastLogin    DateTime? @map("last_login")
 
@@ -38,24 +40,30 @@ model User {
   shippingAddresses   ShippingAddress[]     // Direcciones de envío
   adminRegions        AdminRegion[]         // Regiones que administra (solo admins)
   rewardClaims        RewardClaim[]         // Premios canjeados
+  createdUsers        User[]      @relation("CreatedByRelation")    // Usuarios que creó
+  creator             User?       @relation("CreatedByRelation", fields: [createdBy], references: [id])
 
   @@map("users")
 }
 
 // Información específica de afiliados - Extiende la tabla User
 model Affiliate {
-  id       Int     @id @map("affiliate_id")              // Mismo ID que User (1:1)
-  sponsorId Int?   @map("sponsor_id")                    // Quien lo refirió (puede ser null)
-  phone    String  @db.VarChar(20)                       // Teléfono obligatorio para afiliados
-  region   String? @db.VarChar(100)                      // Ubicación geográfica
-  city     String? @db.VarChar(100)
-  address  String? @db.VarChar(255)
-  reference String? @db.VarChar(255)                     // Referencia de dirección
-  status   String  @default("active") @db.VarChar(20)    // active, pending, suspended
-  points   Int     @default(0)                           // Puntos acumulados para premios
+  id        Int     @id @map("affiliate_id")           // Misma ID que en User (1:1)
+  sponsorId Int?    @map("sponsor_id")                 // ID del patrocinador (puede ser null para el primer afiliado)
+  phone     String  @db.VarChar(20)                    // Teléfono de contacto
+  region    String  @db.VarChar(100)                   // Región donde opera
+  city      String  @db.VarChar(100)                   // Ciudad específica
+  address   String  @db.VarChar(255)                   // Dirección completa
+  reference String? @db.VarChar(255)                   // Referencia de la dirección
+  status    String  @default("active") @db.VarChar(20) // active, inactive, suspended
+  points    Int     @default(0)                        // Puntos acumulados para premios
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relaciones: Un afiliado ES un usuario y puede tener un patrocinador
-  user    User  @relation(fields: [id], references: [id])
+  // Un afiliado ES un usuario (relación 1:1)
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  // Un afiliado puede tener un patrocinador (afiliado que lo refirió)
   sponsor User? @relation("SponsorRelation", fields: [sponsorId], references: [id])
 
   @@map("affiliates")
@@ -65,9 +73,12 @@ model Affiliate {
 model Category {
   id          Int       @id @default(autoincrement()) @map("category_id")
   name        String    @db.VarChar(100)              // Suplementos, Vitaminas, etc.
+  slug        String    @unique @db.VarChar(100)       // URL-friendly name
   description String?
+  imageUrl    String?   @map("image_url") @db.VarChar(500) // URL de imagen de la categoría
   isActive    Boolean   @default(true) @map("is_active") // Para ocultar categorías
   createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   // Una categoría puede tener múltiples productos
   products Product[]
@@ -75,20 +86,24 @@ model Category {
   @@map("categories")
 }
 
+
 // Catálogo principal de productos con precios diferenciados
 model Product {
-  id          Int     @id @default(autoincrement()) @map("product_id")
-  categoryId  Int     @map("category_id")
-  name        String  @db.VarChar(200)
-  description String?
-  price       Decimal @db.Decimal(10, 2)               // Precio para visitantes/público
-  affiliatePrice Decimal @map("affiliate_price") @db.Decimal(10, 2) // Precio preferencial para afiliados
-  stock       Int     @default(0)                      // Inventario actual
-  minStock    Int     @default(0) @map("min_stock")    // Nivel mínimo para alertas
-  isActive    Boolean @default(true) @map("is_active") // Para ocultar productos
-  imageUrl    String? @map("image_url") @db.VarChar(500) // URL de imagen del producto
-  weight      Decimal? @db.Decimal(8, 3)               // Peso para cálculo de envío
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                 Int     @id @default(autoincrement()) @map("product_id")
+  categoryId         Int     @map("category_id")
+  name               String  @db.VarChar(200)
+  description        String?
+  publicPrice        Decimal @map("public_price") @db.Decimal(10, 2)     // Precio para visitantes/público
+  affiliatePrice     Decimal @map("affiliate_price") @db.Decimal(10, 2) // Precio preferencial para afiliados
+  stock              Int     @default(0)                      // Inventario actual
+  minStock           Int     @default(0) @map("min_stock")    // Nivel mínimo para alertas
+  discountPercentage Decimal? @map("discount_percentage") @db.Decimal(5, 2) // Porcentaje de descuento
+  sku                String? @unique @db.VarChar(50)         // Código único del producto
+  isActive           Boolean @default(true) @map("is_active") // Para ocultar productos
+  imageUrl           String? @map("image_url") @db.VarChar(500) // URL de imagen del producto
+  weight             Decimal? @db.Decimal(8, 3)               // Peso para cálculo de envío
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Un producto pertenece a una categoría y puede estar en múltiples carritos/pedidos
   category   Category @relation(fields: [categoryId], references: [id])
