@@ -16,7 +16,15 @@ async function bootstrap() {
 
   // Habilitar CORS para el frontend
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:5173'], // React/Vite
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'Origin',
+      'X-Requested-With',
+    ],
     credentials: true,
   });
 

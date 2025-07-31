@@ -22,6 +22,8 @@ model User {
   passwordHash String   @map("password_hash") @db.VarChar(255)
   role         String   @db.VarChar(20)                  // visitante, afiliado, admin, admin_general, repartidor
   isActive     Boolean  @default(true) @map("is_active") // Para desactivar por incumplimiento de compra mínima
+  maxReferrals Int?     @map("max_referrals")           // Máximo de referidos permitidos (solo para afiliados)
+  createdBy    Int?     @map("created_by")              // Quien creó este usuario
   createdAt    DateTime @default(now()) @map("created_at")
   lastLogin    DateTime? @map("last_login")
 
@@ -38,24 +40,30 @@ model User {
   shippingAddresses   ShippingAddress[]     // Direcciones de envío
   adminRegions        AdminRegion[]         // Regiones que administra (solo admins)
   rewardClaims        RewardClaim[]         // Premios canjeados
+  createdUsers        User[]      @relation("CreatedByRelation")    // Usuarios que creó
+  creator             User?       @relation("CreatedByRelation", fields: [createdBy], references: [id])
 
   @@map("users")
 }
 
 // Información específica de afiliados - Extiende la tabla User
 model Affiliate {
-  id       Int     @id @map("affiliate_id")              // Mismo ID que User (1:1)
-  sponsorId Int?   @map("sponsor_id")                    // Quien lo refirió (puede ser null)
-  phone    String  @db.VarChar(20)                       // Teléfono obligatorio para afiliados
-  region   String? @db.VarChar(100)                      // Ubicación geográfica
-  city     String? @db.VarChar(100)
-  address  String? @db.VarChar(255)
-  reference String? @db.VarChar(255)                     // Referencia de dirección
-  status   String  @default("active") @db.VarChar(20)    // active, pending, suspended
-  points   Int     @default(0)                           // Puntos acumulados para premios
+  id        Int     @id @map("affiliate_id")           // Misma ID que en User (1:1)
+  sponsorId Int?    @map("sponsor_id")                 // ID del patrocinador (puede ser null para el primer afiliado)
+  phone     String  @db.VarChar(20)                    // Teléfono de contacto
+  region    String  @db.VarChar(100)                   // Región donde opera
+  city      String  @db.VarChar(100)                   // Ciudad específica
+  address   String  @db.VarChar(255)                   // Dirección completa
+  reference String? @db.VarChar(255)                   // Referencia de la dirección
+  status    String  @default("active") @db.VarChar(20) // active, inactive, suspended
+  points    Int     @default(0)                        // Puntos acumulados para premios
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relaciones: Un afiliado ES un usuario y puede tener un patrocinador
-  user    User  @relation(fields: [id], references: [id])
+  // Un afiliado ES un usuario (relación 1:1)
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+
+  // Un afiliado puede tener un patrocinador (afiliado que lo refirió)
   sponsor User? @relation("SponsorRelation", fields: [sponsorId], references: [id])
 
   @@map("affiliates")

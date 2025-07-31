@@ -1,9 +1,8 @@
-import * as bcrypt from 'bcryptjs';
-import { User } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 export class AuthUtil {
   /**
-   * Encripta una contraseña usando bcrypt
+   * Hash de password usando bcrypt
    */
   static async hashPassword(password: string): Promise<string> {
     const saltRounds = 12;
@@ -11,25 +10,36 @@ export class AuthUtil {
   }
 
   /**
-   * Compara una contraseña con su hash
+   * Comparar password con hash
    */
-  static async comparePassword(
-    password: string,
-    hashedPassword: string,
-  ): Promise<boolean> {
-    return bcrypt.compare(password, hashedPassword);
+  static async comparePassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
   }
 
   /**
-   * Genera payload para JWT basado en user de la DB
+   * Generar password temporal
    */
-  static createJwtPayload(user: User) {
-    return {
-      id: user.id,
-      dni: user.dni,
-      email: user.email,
-      role: user.role,
-      isActive: user.isActive,
-    };
+  static generateTempPassword(length: number = 8): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  /**
+   * Validar DNI peruano
+   */
+  static validateDNI(dni: string): boolean {
+    return /^\d{8}$/.test(dni);
+  }
+
+  /**
+   * Validar email
+   */
+  static validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 }
