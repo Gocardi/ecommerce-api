@@ -69,6 +69,8 @@ export class ProductsService {
       orderBy[priceField] = sortOrder;
     } else if (sortBy) {
       orderBy[sortBy] = sortOrder;
+    } else {
+      orderBy.createdAt = 'desc'; // Orden por defecto
     }
 
     // Calcular offset para paginación
@@ -100,13 +102,13 @@ export class ProductsService {
       name: product.name,
       description: product.description,
       price: userRole === 'afiliado' ? Number(product.affiliatePrice) : Number(product.publicPrice),
-      originalPrice: Number(product.publicPrice),
+      publicPrice: Number(product.publicPrice),
       affiliatePrice: Number(product.affiliatePrice),
       category: product.category,
       imageUrl: product.imageUrl,
       stock: product.stock,
-      discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
       sku: product.sku,
+      discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
       isAvailable: product.stock > 0,
       createdAt: product.createdAt,
     }));
@@ -153,13 +155,13 @@ export class ProductsService {
       name: product.name,
       description: product.description,
       price: userRole === 'afiliado' ? Number(product.affiliatePrice) : Number(product.publicPrice),
-      originalPrice: Number(product.publicPrice),
+      publicPrice: Number(product.publicPrice),
       affiliatePrice: Number(product.affiliatePrice),
       category: product.category,
       imageUrl: product.imageUrl,
       stock: product.stock,
-      discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
       sku: product.sku,
+      discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
       isAvailable: product.stock > 0,
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
@@ -207,13 +209,13 @@ export class ProductsService {
       name: product.name,
       description: product.description,
       price: userRole === 'afiliado' ? Number(product.affiliatePrice) : Number(product.publicPrice),
-      originalPrice: Number(product.publicPrice),
+      publicPrice: Number(product.publicPrice),
       affiliatePrice: Number(product.affiliatePrice),
       category: product.category,
       imageUrl: product.imageUrl,
       stock: product.stock,
-      discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
       sku: product.sku,
+      discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
       isAvailable: product.stock > 0,
       finalPrice: this.calculateDiscountedPrice(
         userRole === 'afiliado' ? Number(product.affiliatePrice) : Number(product.publicPrice),

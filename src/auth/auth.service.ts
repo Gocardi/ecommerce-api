@@ -24,6 +24,8 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { dni, password } = loginDto;
 
+    console.log('Login attempt for DNI:', dni);
+
     // Buscar usuario por DNI
     const user = await this.prisma.user.findUnique({
       where: { dni },
@@ -33,18 +35,34 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Credenciales incorrectas');
+      console.log('User not found for DNI:', dni);
+      throw new UnauthorizedException('DNI o contraseña incorrectos');
     }
+
+    console.log('User found:', { id: user.id, dni: user.dni, role: user.role });
 
     // Verificar contraseña
     const isPasswordValid = await AuthUtil.comparePassword(password, user.passwordHash);
+    console.log('Password valid:', isPasswordValid);
+    
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciales incorrectas');
+      // Si la contraseña no es válida, verificar si es una contraseña sin hash (para cuentas creadas directamente en BD)
+      if (password === user.passwordHash) {
+        console.log('Plain password match, updating to hashed');
+        // Actualizar a contraseña hasheada
+        const newHashedPassword = await AuthUtil.hashPassword(password);
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash: newHashedPassword },
+        });
+      } else {
+        throw new UnauthorizedException('DNI o contraseña incorrectos');
+      }
     }
 
     // Verificar si el usuario está activo
     if (!user.isActive) {
-      throw new UnauthorizedException('Cuenta desactivada. Contacta al administrador.');
+      throw new UnauthorizedException('Tu cuenta ha sido desactivada. Contacta al administrador.');
     }
 
     // Actualizar último login
@@ -53,15 +71,20 @@ export class AuthService {
       data: { lastLogin: new Date() },
     });
 
-    // Generar JWT
+    // Generar JWT con expiración de 12 horas
     const payload = {
       sub: user.id,
+      id: user.id, // Agregar id directamente para el guard
       dni: user.dni,
       role: user.role,
       email: user.email,
     };
 
-    const token = this.jwtService.sign(payload);
+    const token = this.jwtService.sign(payload, {
+      expiresIn: '12h', // Token expira en 12 horas
+    });
+
+    console.log('Login successful, token generated with 12h expiration');
 
     return {
       user: {
@@ -370,17 +393,88 @@ export class AuthService {
         role: 'afiliado',
         isActive: true,
       },
+      include: {
+        sponsoredAffiliates: true,
+      },
     });
 
     if (!affiliate) {
       throw new NotFoundException('Afiliado no encontrado');
     }
 
-    await this.prisma.user.update({
+    // Verificar que el nuevo límite no sea menor a los referidos actuales
+    if (affiliate.sponsoredAffiliates.length > maxReferrals) {
+      throw new BadRequestException(
+        `El afiliado ya tiene ${affiliate.sponsoredAffiliates.length} referidos. El nuevo límite debe ser mayor.`
+      );
+    }
+
+    const updatedAffiliate = await this.prisma.user.update({
       where: { id: affiliateId },
       data: { maxReferrals },
     });
 
+    return { 
+      success: true,
+      maxReferrals: updatedAffiliate.maxReferrals,
+      currentReferrals: affiliate.sponsoredAffiliates.length
+    };
+  }
+
+  /**
+   * Cambiar contraseña del usuario
+   */
+  async changePassword(userId: number, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Verificar contraseña actual
+    const isCurrentPasswordValid = await AuthUtil.comparePassword(currentPassword, user.passwordHash);
+    if (!isCurrentPasswordValid) {
+      throw new UnauthorizedException('Contraseña actual incorrecta');
+    }
+
+    // Encriptar nueva contraseña
+    const newPasswordHash = await AuthUtil.hashPassword(newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
     return { success: true };
+  }
+
+  /**
+   * Verificar disponibilidad de DNI
+   */
+  async checkDniAvailability(dni: string) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { dni },
+    });
+
+    return {
+      available: !existingUser,
+      dni,
+    };
+  }
+
+  /**
+   * Verificar disponibilidad de email
+   */
+  async checkEmailAvailability(email: string) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    return {
+      available: !existingUser,
+      email,
+    };
   }
 }

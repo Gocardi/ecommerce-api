@@ -141,7 +141,7 @@ export class ProductsController {
    */
   @Post()
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'admin_general') // Agregar admin_general
   async create(@Body() createProductDto: CreateProductDto) {
     const product = await this.productsService.create(createProductDto);
 
@@ -157,7 +157,7 @@ export class ProductsController {
    */
   @Post(':id/stock')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'admin_general') // Agregar admin_general
   async updateStock(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateStockDto: { stock: number },

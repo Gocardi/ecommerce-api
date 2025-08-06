@@ -80,7 +80,7 @@ export class CategoriesController {
    */
   @Post()
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'admin_general') // Agregar admin_general
   async create(@Body() createCategoryDto: CreateCategoryDto) {
     const category = await this.categoriesService.create(createCategoryDto);
     
@@ -96,7 +96,7 @@ export class CategoriesController {
    */
   @Patch(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'admin_general') // Agregar admin_general
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCategoryDto: UpdateCategoryDto,
@@ -115,7 +115,7 @@ export class CategoriesController {
    */
   @Delete(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'admin_general') // Agregar admin_general
   async remove(@Param('id', ParseIntPipe) id: number) {
     await this.categoriesService.remove(id);
     
